@@ -1,0 +1,124 @@
+version: "3.8"
+services:
+  # https://github.com/qdm12/gluetun
+  gluetun:
+    image: qmcgaw/gluetun
+    container_name: gluetun
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    ports:
+      - 8085:8085/tcp
+    volumes:
+      - ${APPDATA}/gluetun:/gluetun
+    environment:
+      - VPN_SERVICE_PROVIDER=mullvad
+      - VPN_TYPE=wireguard
+      - WIREGUARD_PRIVATE_KEY=${PrivateKey}
+      - WIREGUARD_ADDRESSES=${Address}
+      - SERVER_CITIES=${Cities}
+      - TZ=${TZ}
+    restart: always
+
+  # https://hub.docker.com/r/linuxserver/qbittorrent
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    network_mode: service:gluetun
+    environment:
+      - PUID=${UID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - WEBUI_PORT=8085
+    volumes:
+      - ${APPDATA}/qbittorrent:/config
+      - ${MEDIA}:/media
+    labels:
+      - autoheal=true
+    healthcheck:
+      test: "curl -sf https://example.com || exit 1"
+      interval: 30s
+      timeout: 10s
+      retries: 1
+    restart: always
+
+  # https://hub.docker.com/r/willfarrell/autoheal
+  autoheal:
+    image: willfarrell/autoheal
+    container_name: autoheal
+    environment:
+      - AUTOHEAL_CONTAINER_LABEL=autoheal
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    network_mode: none
+    restart: always
+
+  # https://hub.docker.com/r/jellyfin/jellyfin
+  jellyfin:
+    image: jellyfin/jellyfin
+    container_name: jellyfin
+    user: ${UID}:${GID}
+    network_mode: "host"
+    volumes:
+      - ${APPDATA}/jellyfin/config:/config
+      - ${APPDATA}/jellyfin/cache:/cache
+      - ${MEDIA}:/media
+    restart: unless-stopped
+
+  # https://hub.docker.com/r/linuxserver/sonarr
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    environment:
+      - PUID=${UID}
+      - PGID=${GID}
+      - TZ=${TZ}
+    volumes:
+      - ${APPDATA}/sonarr/config:/config
+      - ${MEDIA}:/media
+    ports:
+      - 8989:8989
+    restart: unless-stopped
+
+  # https://hub.docker.com/r/linuxserver/radarr
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    environment:
+      - PUID=${UID}
+      - PGID=${GID}
+      - TZ=${TZ}
+    volumes:
+      - ${APPDATA}/radarr/config:/config
+      - ${MEDIA}:/media
+    ports:
+      - 7878:7878
+    restart: unless-stopped
+
+  # https://hub.docker.com/r/linuxserver/prowlarr
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    environment:
+      - PUID=${UID}
+      - PGID=${GID}
+      - TZ=${TZ}
+    volumes:
+      - ${APPDATA}/prowlarr/config:/config
+    ports:
+      - 9696:9696
+    restart: unless-stopped
+
+  # https://hub.docker.com/r/fallenbagel/jellyseerr
+  jellyseerr:
+    image: fallenbagel/jellyseerr:latest
+    container_name: jellyseerr
+    environment:
+      - LOG_LEVEL=debug
+      - TZ=${TZ}
+    volumes:
+      - ${APPDATA}/jellyseerr/config:/app/config
+    ports:
+      - 5055:5055
+    restart: unless-stopped
